@@ -1,0 +1,43 @@
+```gitignore
+# Maven build output
+target/
+
+# Java compiled files
+*.class
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+.project
+.classpath
+.settings/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local application configuration containing credentials
+application-local.properties
+application-local.yml
+application-local.yaml
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.bak
+
+# Local uploads and generated files
+uploads/
+```
