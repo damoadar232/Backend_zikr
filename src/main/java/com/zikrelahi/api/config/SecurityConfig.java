@@ -16,6 +16,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfigurationSource;
 
 import static jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN;
 import static jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
@@ -27,10 +28,12 @@ import static jakarta.servlet.http.HttpServletResponse.SC_UNAUTHORIZED;
 public class SecurityConfig {
 
         private final JwtAuthenticationFilter jwtAuthenticationFilter;
+        private final CorsConfigurationSource corsConfigurationSource;
 
         @Bean
         public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
                 return http
+                                .cors(cors -> cors.configurationSource(corsConfigurationSource))
                                 .csrf(AbstractHttpConfigurer::disable)
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -38,6 +41,7 @@ public class SecurityConfig {
                                                 .requestMatchers("/api/v1/auth/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/quran/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/lyrics/**").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/v1/artists/**").permitAll()
                                                 .requestMatchers("/actuator/health").permitAll()
                                                 .requestMatchers("/api/v1/admin/**")
                                                 .hasAnyRole("ADMIN", "SUPER_ADMIN")

@@ -1,10 +1,10 @@
 package com.zikrelahi.api.lyrics;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.zikrelahi.api.admin.AdminUser;
 import com.zikrelahi.api.common.ApiResponse;
 import com.zikrelahi.api.lyrics.LyricDtos.AdminLyricDto;
 import com.zikrelahi.api.lyrics.LyricDtos.LanguageVersionRequest;
-import com.zikrelahi.api.lyrics.LyricDtos.MetadataRequest;
 import com.zikrelahi.api.lyrics.LyricDtos.PageSlice;
 import com.zikrelahi.api.lyrics.LyricDtos.RevisionDto;
 import com.zikrelahi.api.security.AdminUserDetails;
@@ -44,8 +44,8 @@ public class AdminLyricController {
 
     @PostMapping
     public ResponseEntity<ApiResponse<AdminLyricDto>> create(
-            @Valid @RequestBody MetadataRequest request, Authentication authentication) {
-        AdminLyricDto created = lyricService.create(request, currentAdmin(authentication));
+            @RequestBody JsonNode request, Authentication authentication) {
+        AdminLyricDto created = lyricService.createRequest(request, currentAdmin(authentication));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(created));
     }
 
@@ -66,10 +66,10 @@ public class AdminLyricController {
     @PutMapping("/{reference}")
     public ResponseEntity<ApiResponse<AdminLyricDto>> update(
             @PathVariable String reference,
-            @Valid @RequestBody MetadataRequest request,
+            @RequestBody JsonNode request,
             Authentication authentication) {
         return ResponseEntity.ok(ApiResponse.ok(
-                lyricService.updateMetadata(reference, request, currentAdmin(authentication))));
+                lyricService.updateRequest(reference, request, currentAdmin(authentication))));
     }
 
     @PutMapping("/{reference}/languages/{languageCode}")

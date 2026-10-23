@@ -59,11 +59,24 @@ public class GlobalExceptionHandler {
                                 .body(ApiResponse.error("INVALID_PARAMETER", ex.getMessage()));
         }
 
-        @ExceptionHandler({ HttpMessageNotReadableException.class, ConstraintViolationException.class })
+        @ExceptionHandler(HttpMessageNotReadableException.class)
         public ResponseEntity<ApiResponse<Void>> handleMalformedRequest(Exception ex) {
                 return ResponseEntity.badRequest()
                                 .body(ApiResponse.error("INVALID_REQUEST",
                                                 "The request body or parameters are invalid."));
+        }
+
+        @ExceptionHandler(ConstraintViolationException.class)
+        public ResponseEntity<ApiResponse<Map<String, String>>> handleConstraintValidation(
+                        ConstraintViolationException ex) {
+                Map<String, String> fieldErrors = ex.getConstraintViolations().stream()
+                                .collect(Collectors.toMap(
+                                                violation -> violation.getPropertyPath().toString(),
+                                                violation -> violation.getMessage(),
+                                                (first, second) -> first));
+                return ResponseEntity
+                                .status(HttpStatus.BAD_REQUEST)
+                                .body(new ApiResponse<>(fieldErrors, "VALIDATION_ERROR", "Request validation failed."));
         }
 
         @ExceptionHandler(MaxUploadSizeExceededException.class)

@@ -56,9 +56,17 @@ public class LyricLanguageVersion {
     private LyricLanguageCode languageCode;
 
     @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_format", nullable = false, length = 20)
+    @Builder.Default
+    private LyricContentFormat contentFormat = LyricContentFormat.TIPTAP_JSON;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(nullable = false, columnDefinition = "json")
+    @Column(nullable = true, columnDefinition = "json")
     private JsonNode document;
+
+    @Column(name = "html_content", columnDefinition = "longtext")
+    private String htmlContent;
 
     @Column(name = "plain_text", columnDefinition = "TEXT")
     private String plainText;
@@ -96,12 +104,12 @@ public class LyricLanguageVersion {
             createdAt = now;
         if (updatedAt == null)
             updatedAt = now;
-        TiptapDocumentRules.requirePersistable(document);
+        LyricContentRules.requireValid(contentFormat, document, htmlContent);
     }
 
     @PreUpdate
     void onUpdate() {
-        TiptapDocumentRules.requirePersistable(document);
+        LyricContentRules.requireValid(contentFormat, document, htmlContent);
         updatedAt = LocalDateTime.now();
     }
 

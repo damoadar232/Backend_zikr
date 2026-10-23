@@ -10,7 +10,7 @@ import java.util.Set;
 final class LyricRelations {
     final Set<String> categoryIds = new LinkedHashSet<>();
     final Set<String> subjectIds = new LinkedHashSet<>();
-    final Set<String> artistIds = new LinkedHashSet<>();
+    final Set<Long> artistIds = new LinkedHashSet<>();
     final List<String> reciters = new ArrayList<>();
     final Set<String> tags = new LinkedHashSet<>();
     final List<MediaReferenceDto> mediaReferences = new ArrayList<>();
@@ -23,7 +23,7 @@ final class LyricRelations {
         return List.copyOf(subjectIds);
     }
 
-    List<String> artistIds() {
+    List<Long> artistIds() {
         return List.copyOf(artistIds);
     }
 

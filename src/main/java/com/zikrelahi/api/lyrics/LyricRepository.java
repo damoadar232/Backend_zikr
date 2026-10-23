@@ -41,9 +41,24 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
                   SELECT 1 FROM lyric_category_assignments ca
                   WHERE ca.lyric_id = l.id AND ca.category_id = :categoryId))
               AND (:reciter IS NULL OR EXISTS (
-                  SELECT 1 FROM lyric_reciters r
-                  WHERE r.lyric_id = l.id AND LOWER(r.display_name) LIKE CONCAT('%', LOWER(:reciter), '%')))
-              AND (:poet IS NULL OR l.writer_id = :poet OR LOWER(l.writer_name) = LOWER(:poet))
+                  SELECT 1 FROM lyric_artist_ids la
+                  JOIN artists a ON a.id = la.artist_id
+                  WHERE la.lyric_id = l.id AND la.role = 'RECITER'
+                    AND (LOWER(COALESCE(a.display_name, a.full_name)) LIKE CONCAT('%', LOWER(:reciter), '%')
+                         OR a.artist_key = :reciter))
+                  OR EXISTS (
+                      SELECT 1 FROM lyric_reciters r
+                      WHERE r.lyric_id = l.id
+                        AND LOWER(r.display_name) LIKE CONCAT('%', LOWER(:reciter), '%')))
+              AND (:poetArtistId IS NULL OR l.writer_id = :poetArtistId)
+              AND (:poet IS NULL OR :poetArtistId IS NOT NULL
+                   OR l.writer_id_legacy = :poet OR LOWER(l.writer_name) = LOWER(:poet)
+                   OR EXISTS (
+                       SELECT 1 FROM lyric_artist_ids la
+                       JOIN artists a ON a.id = la.artist_id
+                       WHERE la.lyric_id = l.id AND la.role = 'WRITER'
+                         AND (a.artist_key = :poet OR LOWER(a.full_name) = LOWER(:poet)
+                              OR LOWER(a.display_name) = LOWER(:poet))))
               AND (:languageCode IS NULL OR EXISTS (
                   SELECT 1 FROM lyric_language_versions v
                   WHERE v.lyric_id = l.id AND v.language_code = :languageCode AND v.status = 'PUBLISHED'))
@@ -55,9 +70,24 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
                   SELECT 1 FROM lyric_category_assignments ca
                   WHERE ca.lyric_id = l.id AND ca.category_id = :categoryId))
               AND (:reciter IS NULL OR EXISTS (
-                  SELECT 1 FROM lyric_reciters r
-                  WHERE r.lyric_id = l.id AND LOWER(r.display_name) LIKE CONCAT('%', LOWER(:reciter), '%')))
-              AND (:poet IS NULL OR l.writer_id = :poet OR LOWER(l.writer_name) = LOWER(:poet))
+                  SELECT 1 FROM lyric_artist_ids la
+                  JOIN artists a ON a.id = la.artist_id
+                  WHERE la.lyric_id = l.id AND la.role = 'RECITER'
+                    AND (LOWER(COALESCE(a.display_name, a.full_name)) LIKE CONCAT('%', LOWER(:reciter), '%')
+                         OR a.artist_key = :reciter))
+                  OR EXISTS (
+                      SELECT 1 FROM lyric_reciters r
+                      WHERE r.lyric_id = l.id
+                        AND LOWER(r.display_name) LIKE CONCAT('%', LOWER(:reciter), '%')))
+              AND (:poetArtistId IS NULL OR l.writer_id = :poetArtistId)
+              AND (:poet IS NULL OR :poetArtistId IS NOT NULL
+                   OR l.writer_id_legacy = :poet OR LOWER(l.writer_name) = LOWER(:poet)
+                   OR EXISTS (
+                       SELECT 1 FROM lyric_artist_ids la
+                       JOIN artists a ON a.id = la.artist_id
+                       WHERE la.lyric_id = l.id AND la.role = 'WRITER'
+                         AND (a.artist_key = :poet OR LOWER(a.full_name) = LOWER(:poet)
+                              OR LOWER(a.display_name) = LOWER(:poet))))
               AND (:languageCode IS NULL OR EXISTS (
                   SELECT 1 FROM lyric_language_versions v
                   WHERE v.lyric_id = l.id AND v.language_code = :languageCode AND v.status = 'PUBLISHED'))
@@ -65,6 +95,7 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
     Page<Lyric> findPublicPage(@Param("categoryId") String categoryId,
             @Param("reciter") String reciter,
             @Param("poet") String poet,
+            @Param("poetArtistId") Long poetArtistId,
             @Param("languageCode") String languageCode,
             Pageable pageable);
 }

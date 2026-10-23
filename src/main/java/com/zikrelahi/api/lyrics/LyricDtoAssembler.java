@@ -59,7 +59,8 @@ public class LyricDtoAssembler {
     public RevisionDto toRevision(LyricRevision revision) {
         return new RevisionDto(revision.getId(), revision.getRevisionNumber(), revision.getLanguageCode(),
                 revision.getLyricTitleSnapshot(), revision.getLyricSlugSnapshot(), revision.getDocumentSnapshot(),
-                revision.getPlainTextSnapshot(), revision.getStatusSnapshot(), revision.getVersionUpdatedAt(),
+                revision.getContentFormat(), revision.getHtmlContentSnapshot(), revision.getPlainTextSnapshot(),
+                revision.getStatusSnapshot(), revision.getVersionUpdatedAt(),
                 revision.getCreatedAt(),
                 revision.getChangedBy() == null ? null : revision.getChangedBy().getDisplayName(),
                 revision.getChangeNote());
@@ -88,15 +89,24 @@ public class LyricDtoAssembler {
 
     private PublicLanguageVersionDto toPublicVersion(LyricLanguageVersion version) {
         LyricLanguageCode language = version.getLanguageCode();
+        boolean html = version.getContentFormat() == LyricContentFormat.HTML;
+        String content = html
+                ? HtmlTranslationSanitizer.validatePersisted(version.getHtmlContent()).html()
+                : null;
         return new PublicLanguageVersionDto(language, label(language), script(language), direction(language),
-                TiptapDocumentValidator.validatePersisted(version.getDocument()).document(), version.getPlainText());
+                html ? null : TiptapDocumentValidator.validatePersisted(version.getDocument()).document(),
+                version.getContentFormat(), content, version.getPlainText());
     }
 
     private AdminLanguageVersionDto toAdminVersion(LyricLanguageVersion version) {
+        boolean html = version.getContentFormat() == LyricContentFormat.HTML;
+        String content = html
+                ? HtmlTranslationSanitizer.validatePersisted(version.getHtmlContent()).html()
+                : null;
         return new AdminLanguageVersionDto(version.getId(), version.getLanguageCode(),
-                TiptapDocumentValidator.validatePersisted(version.getDocument()).document(),
-                version.getPlainText(), version.getStatus(), version.getCreatedAt(), version.getUpdatedAt(),
-                version.getRowVersion());
+                html ? null : TiptapDocumentValidator.validatePersisted(version.getDocument()).document(),
+                version.getContentFormat(), content, version.getPlainText(), version.getStatus(),
+                version.getCreatedAt(), version.getUpdatedAt(), version.getRowVersion());
     }
 
     private Map<Long, List<LyricLanguageVersion>> groupVersions(List<LyricLanguageVersion> versions) {

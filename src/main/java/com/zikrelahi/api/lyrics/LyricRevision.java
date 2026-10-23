@@ -73,9 +73,17 @@ public class LyricRevision {
     private String lyricSlugSnapshot;
 
     @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "content_format", nullable = false, length = 20)
+    @Builder.Default
+    private LyricContentFormat contentFormat = LyricContentFormat.TIPTAP_JSON;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "document_snapshot", nullable = false, columnDefinition = "json")
+    @Column(name = "document_snapshot", nullable = true, columnDefinition = "json")
     private JsonNode documentSnapshot;
+
+    @Column(name = "html_content_snapshot", columnDefinition = "longtext")
+    private String htmlContentSnapshot;
 
     @Column(name = "plain_text_snapshot", columnDefinition = "TEXT")
     private String plainTextSnapshot;
@@ -107,5 +115,6 @@ public class LyricRevision {
     void onPersist() {
         if (createdAt == null)
             createdAt = LocalDateTime.now();
+        LyricContentRules.requireValid(contentFormat, documentSnapshot, htmlContentSnapshot);
     }
 }

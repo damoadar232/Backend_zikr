@@ -68,13 +68,21 @@ public class Lyric {
     @Column(nullable = false, length = 180, unique = true)
     private String slug;
 
-    @Size(max = 120)
-    @Column(name = "artist_id", length = 120)
-    private String artistId;
+    @Column(name = "artist_id")
+    private Long artistId;
 
+    @Column(name = "writer_id")
+    private Long writerId;
+
+    @JsonIgnore
     @Size(max = 120)
-    @Column(name = "writer_id", length = 120)
-    private String writerId;
+    @Column(name = "artist_id_legacy", length = 120)
+    private String legacyArtistId;
+
+    @JsonIgnore
+    @Size(max = 120)
+    @Column(name = "writer_id_legacy", length = 120)
+    private String legacyWriterId;
 
     @Size(max = 200)
     @Column(name = "writer_name", length = 200)
@@ -109,19 +117,6 @@ public class Lyric {
     @JoinTable(name = "lyric_subject_assignments", joinColumns = @JoinColumn(name = "lyric_id"), inverseJoinColumns = @JoinColumn(name = "subject_id"))
     @Builder.Default
     private Set<LyricSubject> subjects = new LinkedHashSet<>();
-
-    @ElementCollection
-    @CollectionTable(name = "lyric_artist_ids", joinColumns = @JoinColumn(name = "lyric_id"))
-    @Column(name = "artist_id", nullable = false, length = 120)
-    @Builder.Default
-    private Set<String> artistIds = new LinkedHashSet<>();
-
-    @ElementCollection
-    @CollectionTable(name = "lyric_reciters", joinColumns = @JoinColumn(name = "lyric_id"))
-    @OrderColumn(name = "position")
-    @Column(name = "display_name", nullable = false, length = 200)
-    @Builder.Default
-    private List<String> reciters = new ArrayList<>();
 
     @ElementCollection
     @CollectionTable(name = "lyric_tags", joinColumns = @JoinColumn(name = "lyric_id"))

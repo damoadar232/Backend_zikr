@@ -29,7 +29,8 @@ public class PublicLyricService {
                 ? LyricLanguageCode.fromApiCode(language).name()
                 : null;
         Page<Lyric> results = lyricRepository.findPublicPage(
-                clean(category), clean(reciter), clean(poet), languageCode, PageRequest.of(page, size));
+                clean(category), clean(reciter), clean(poet), numericId(poet),
+                languageCode, PageRequest.of(page, size));
         return new PageSlice<>(assembler.toPublic(results.getContent()), results.getNumber(),
                 results.getSize(), results.getTotalElements(), results.getTotalPages());
     }
@@ -66,5 +67,16 @@ public class PublicLyricService {
 
     private static String clean(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
+    }
+
+    private static Long numericId(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value.trim());
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 }

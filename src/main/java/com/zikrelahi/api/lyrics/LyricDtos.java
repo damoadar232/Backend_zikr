@@ -5,10 +5,14 @@ import com.zikrelahi.api.common.ContentStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.AssertTrue;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class LyricDtos {
 
@@ -45,6 +49,51 @@ public final class LyricDtos {
             @jakarta.validation.constraints.PositiveOrZero Long expectedRowVersion) {
     }
 
+    public record CombinedLyricRequest(
+            @NotBlank @Size(max = 250) String title,
+            @Size(max = 180) String slug,
+            @Positive Long writerId,
+            @Size(max = 30) List<@NotNull @Positive Long> reciterIds,
+            @Size(max = 30) List<@NotNull @Positive Long> categoryIds,
+            @Size(max = 30) List<@NotNull @Positive Long> subjectIds,
+            @Size(max = 50) List<@NotBlank @Size(max = 120) String> tags,
+            @Size(max = 120) String bookId,
+            Boolean featured,
+            @Size(max = 40) List<@Valid MediaReferenceRequest> mediaReferences,
+            @Size(max = 3) List<@NotNull @Valid HtmlTranslationRequest> translations,
+            @Positive Long artistId) {
+
+        @AssertTrue(message = "Numeric reference IDs must not contain duplicates.")
+        public boolean isReferenceIdsUnique() {
+            return unique(reciterIds) && unique(categoryIds) && unique(subjectIds);
+        }
+
+        @AssertTrue(message = "Translation language codes must not contain duplicates.")
+        public boolean isTranslationLanguagesUnique() {
+            if (translations == null) {
+                return true;
+            }
+            Set<LyricLanguageCode> languages = new HashSet<>();
+            return translations.stream().allMatch(translation -> translation == null
+                    || languages.add(translation.languageCode()));
+        }
+
+        private static boolean unique(List<Long> ids) {
+            return ids == null || ids.stream().allMatch(new HashSet<>()::add);
+        }
+    }
+
+    public record HtmlTranslationRequest(
+            @NotNull LyricLanguageCode languageCode,
+            @NotBlank @Size(max = 262_144) String content,
+            @NotNull HtmlTranslationFormat contentFormat,
+            @jakarta.validation.constraints.PositiveOrZero Long expectedRowVersion) {
+    }
+
+    public enum HtmlTranslationFormat {
+        HTML
+    }
+
     public record StatusRequest(@NotNull ContentStatus status) {
     }
 
@@ -52,10 +101,10 @@ public final class LyricDtos {
             String id,
             String title,
             String slug,
-            String artistId,
-            List<String> artistIds,
+            Long artistId,
+            List<Long> artistIds,
             List<String> reciters,
-            String writerId,
+            Long writerId,
             String writer,
             List<String> categoryIds,
             List<String> subjectIds,
@@ -75,6 +124,8 @@ public final class LyricDtos {
             String script,
             String dir,
             JsonNode document,
+            LyricContentFormat contentFormat,
+            String content,
             String text) {
     }
 
@@ -83,10 +134,10 @@ public final class LyricDtos {
             String legacyId,
             String title,
             String slug,
-            String artistId,
-            List<String> artistIds,
+            Long artistId,
+            List<Long> artistIds,
             List<String> reciters,
-            String writerId,
+            Long writerId,
             String writer,
             List<String> categoryIds,
             List<String> subjectIds,
@@ -105,6 +156,8 @@ public final class LyricDtos {
             Long id,
             LyricLanguageCode languageCode,
             JsonNode document,
+            LyricContentFormat contentFormat,
+            String content,
             String plainText,
             ContentStatus status,
             LocalDateTime createdAt,
@@ -119,6 +172,8 @@ public final class LyricDtos {
             String lyricTitle,
             String lyricSlug,
             JsonNode document,
+            LyricContentFormat contentFormat,
+            String content,
             String plainText,
             ContentStatus status,
             LocalDateTime versionUpdatedAt,
