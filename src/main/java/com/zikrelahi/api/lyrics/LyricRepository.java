@@ -61,7 +61,7 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
                               OR LOWER(a.display_name) = LOWER(:poet))))
               AND (:languageCode IS NULL OR EXISTS (
                   SELECT 1 FROM lyric_language_versions v
-                  WHERE v.lyric_id = l.id AND v.language_code = :languageCode AND v.status = 'PUBLISHED'))
+                  WHERE v.lyric_id = l.id AND v.language_code = :languageCode))
             ORDER BY l.created_at DESC, l.id DESC
             """, countQuery = """
             SELECT COUNT(*) FROM lyrics l
@@ -90,7 +90,7 @@ public interface LyricRepository extends JpaRepository<Lyric, Long> {
                               OR LOWER(a.display_name) = LOWER(:poet))))
               AND (:languageCode IS NULL OR EXISTS (
                   SELECT 1 FROM lyric_language_versions v
-                  WHERE v.lyric_id = l.id AND v.language_code = :languageCode AND v.status = 'PUBLISHED'))
+                  WHERE v.lyric_id = l.id AND v.language_code = :languageCode))
             """, nativeQuery = true)
     Page<Lyric> findPublicPage(@Param("categoryId") String categoryId,
             @Param("reciter") String reciter,

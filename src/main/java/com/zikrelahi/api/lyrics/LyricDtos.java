@@ -159,7 +159,6 @@ public final class LyricDtos {
             LyricContentFormat contentFormat,
             String content,
             String plainText,
-            ContentStatus status,
             LocalDateTime createdAt,
             LocalDateTime updatedAt,
             Long rowVersion) {

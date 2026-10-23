@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,11 +44,9 @@ class LyricPersistenceTest {
                 .legacyId("786-durood")
                 .title("786 Durood")
                 .slug("786-durood")
-                .artistId("traditional")
-                .writerId("traditional-poet")
+                .legacyArtistId("traditional")
+                .legacyWriterId("traditional-poet")
                 .writerName("Traditional")
-                .reciters(java.util.List.of("Traditional"))
-                .artistIds(Set.of("traditional"))
                 .categories(Set.of(categoryRepository.findById("durood-o-salam").orElseThrow()))
                 .status(ContentStatus.PUBLISHED)
                 .build());
@@ -67,8 +66,11 @@ class LyricPersistenceTest {
         }
         assertEquals(document, storedDocument);
         assertEquals(LyricLanguageCode.roman, loaded.getLanguageCode());
+        assertEquals(LyricContentFormat.TIPTAP_JSON, loaded.getContentFormat());
         assertEquals("en", loaded.getLanguageCode().toEditorCode());
-        assertEquals("traditional-poet", loadedLyric.getWriterId());
+        assertEquals(null, loadedLyric.getArtistId());
+        assertEquals(null, loadedLyric.getWriterId());
+        assertEquals("traditional-poet", loadedLyric.getLegacyWriterId());
         assertEquals(Set.of("durood-o-salam"), loadedLyric.getCategories().stream().map(LyricCategory::getId)
                 .collect(java.util.stream.Collectors.toSet()));
     }
@@ -118,6 +120,43 @@ class LyricPersistenceTest {
                         .put("type", "doc").set("content", objectMapper.createArrayNode()),
                 "", ContentStatus.DRAFT, null, null));
         assertTrue(lyricRepository.existsById(lyric.getId()));
+    }
+
+    @Test
+    void persistsHtmlAndSnapshotsItsFormatWhenTheLegacyJsonWriterReplacesIt() throws Exception {
+        Lyric lyric = saveLyric("html-revision-test");
+        String originalHtml = "<p dir=\"rtl\"><span style=\"color: #dc2626; font-size: 28px; "
+                + "font-family: Noto Nastaliq Urdu; font-weight: 700\">سلام</span></p>";
+        LyricLanguageVersion htmlVersion = persistenceService.saveHtmlLanguageVersion(
+                lyric.getId(), LyricLanguageCode.ur, originalHtml, ContentStatus.DRAFT, null, null, null);
+
+        entityManager.flush();
+        entityManager.clear();
+        LyricLanguageVersion loadedHtml = versionRepository.findById(htmlVersion.getId()).orElseThrow();
+        assertEquals(LyricContentFormat.HTML, loadedHtml.getContentFormat());
+        assertEquals(originalHtml, loadedHtml.getHtmlContent());
+        assertNull(loadedHtml.getDocument());
+        assertEquals("سلام", loadedHtml.getPlainText());
+
+        persistenceService.saveLanguageVersion(lyric.getId(), LyricLanguageCode.ur,
+                document("Legacy JSON update"), "Legacy JSON update", ContentStatus.DRAFT, null, null);
+        entityManager.flush();
+        entityManager.clear();
+
+        LyricRevision revision = revisionRepository
+                .findAllByLanguageVersion_IdOrderByRevisionNumberDesc(htmlVersion.getId())
+                .getFirst();
+        assertEquals(LyricContentFormat.HTML, revision.getContentFormat());
+        assertEquals(originalHtml, revision.getHtmlContentSnapshot());
+        assertNull(revision.getDocumentSnapshot());
+        LyricLanguageVersion current = versionRepository.findById(htmlVersion.getId()).orElseThrow();
+        assertEquals(LyricContentFormat.TIPTAP_JSON, current.getContentFormat());
+        assertNull(current.getHtmlContent());
+        JsonNode currentDocument = current.getDocument();
+        if (currentDocument.isTextual()) {
+            currentDocument = objectMapper.readTree(currentDocument.asText());
+        }
+        assertEquals(document("Legacy JSON update"), currentDocument);
     }
 
     private Lyric saveLyric(String suffix) {

@@ -1,6 +1,5 @@
 package com.zikrelahi.api.lyrics;
 
-import com.zikrelahi.api.common.ContentStatus;
 import com.zikrelahi.api.lyrics.LyricDtos.AdminLanguageVersionDto;
 import com.zikrelahi.api.lyrics.LyricDtos.AdminLyricDto;
 import com.zikrelahi.api.lyrics.LyricDtos.MediaReferenceDto;
@@ -32,7 +31,7 @@ public class LyricDtoAssembler {
         List<Long> ids = lyrics.stream().map(Lyric::getId).toList();
         Map<Long, LyricRelations> relations = metadataBatchLoader.load(ids);
         Map<Long, List<LyricLanguageVersion>> versions = groupVersions(
-                languageVersionRepository.findAllForLyricIdsAndStatus(ids, ContentStatus.PUBLISHED));
+                languageVersionRepository.findAllForLyricIds(ids));
         return lyrics.stream().map(lyric -> toPublic(lyric,
                 relations.getOrDefault(lyric.getId(), new LyricRelations()),
                 versions.getOrDefault(lyric.getId(), List.of()))).toList();
@@ -105,7 +104,7 @@ public class LyricDtoAssembler {
                 : null;
         return new AdminLanguageVersionDto(version.getId(), version.getLanguageCode(),
                 html ? null : TiptapDocumentValidator.validatePersisted(version.getDocument()).document(),
-                version.getContentFormat(), content, version.getPlainText(), version.getStatus(),
+                version.getContentFormat(), content, version.getPlainText(),
                 version.getCreatedAt(), version.getUpdatedAt(), version.getRowVersion());
     }
 

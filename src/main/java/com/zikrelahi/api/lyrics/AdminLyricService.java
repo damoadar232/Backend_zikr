@@ -281,13 +281,12 @@ public class AdminLyricService {
         for (PreparedTranslation translation : prepared.translations()) {
             LyricLanguageVersion existing = languageVersionRepository
                     .findByLyric_IdAndLanguageCode(lyric.getId(), translation.languageCode()).orElse(null);
-            ContentStatus status = existing == null ? ContentStatus.DRAFT : existing.getStatus();
             Long expectedRowVersion = existing == null ? null : existing.getRowVersion();
             persistenceService.saveHtmlLanguageVersion(
                     lyric.getId(),
                     translation.languageCode(),
                     translation.content().html(),
-                    status,
+                    ContentStatus.DRAFT,
                     editor,
                     null,
                     expectedRowVersion);
@@ -519,49 +518,16 @@ public class AdminLyricService {
                 || !request.expectedRowVersion().equals(currentVersion.getRowVersion()))) {
             throw new ConflictException("This language version changed after it was loaded. Reload before saving.");
         }
-        boolean demoteLyric = isOnlyPublishedLanguage(lyric, language);
         persistenceService.saveLanguageVersion(lyric.getId(), language, validated.document(),
                 validated.plainText(), ContentStatus.DRAFT, editor, request.changeNote());
-        if (demoteLyric) {
-            lyric.setStatus(ContentStatus.DRAFT);
-            lyric.setUpdatedBy(editor);
-            lyricRepository.save(lyric);
-        }
-        return assembler.toAdmin(lyricRepository.findById(lyric.getId()).orElseThrow());
-    }
-
-    @Transactional
-    public AdminLyricDto setLanguageStatus(String reference, String languageCode,
-            ContentStatus status, AdminUser editor) {
-        Lyric lyric = findAdmin(reference);
-        LyricLanguageCode language = LyricLanguageCode.fromApiCode(languageCode);
-        LyricLanguageVersion version = languageVersionRepository
-                .findByLyric_IdAndLanguageCode(lyric.getId(), language)
-                .orElseThrow(() -> new ResourceNotFoundException("Language version not found."));
-        boolean demoteLyric = status == ContentStatus.DRAFT && isOnlyPublishedLanguage(lyric, language);
-        if (version.getContentFormat() == LyricContentFormat.HTML) {
-            persistenceService.saveHtmlLanguageVersion(lyric.getId(), language, version.getHtmlContent(),
-                    status, editor, "Language status changed to " + status.name(), version.getRowVersion());
-        } else {
-            TiptapDocumentValidator.ValidatedDocument validated = TiptapDocumentValidator
-                    .validatePersisted(version.getDocument());
-            persistenceService.saveLanguageVersion(lyric.getId(), language, validated.document(),
-                    validated.plainText(), status, editor, "Language status changed to " + status.name() + ".");
-        }
-        if (demoteLyric) {
-            lyric.setStatus(ContentStatus.DRAFT);
-            lyric.setUpdatedBy(editor);
-            lyricRepository.save(lyric);
-        }
         return assembler.toAdmin(lyricRepository.findById(lyric.getId()).orElseThrow());
     }
 
     @Transactional
     public AdminLyricDto setLyricStatus(String reference, ContentStatus status, AdminUser editor) {
         Lyric lyric = findAdmin(reference);
-        if (status == ContentStatus.PUBLISHED
-                && languageVersionRepository.countByLyric_IdAndStatus(lyric.getId(), ContentStatus.PUBLISHED) == 0) {
-            throw new ConflictException("Publish at least one language version before publishing a lyric.");
+        if (status == ContentStatus.PUBLISHED && !hasValidLanguageVersion(lyric.getId())) {
+            throw new ConflictException("Save at least one valid language version before publishing a lyric.");
         }
         lyric.setStatus(status);
         lyric.setUpdatedBy(editor);
@@ -641,12 +607,18 @@ public class AdminLyricService {
         return new LinkedHashSet<>(categories);
     }
 
-    private boolean isOnlyPublishedLanguage(Lyric lyric, LyricLanguageCode language) {
-        return lyric.getStatus() == ContentStatus.PUBLISHED
-                && languageVersionRepository.countByLyric_IdAndStatus(lyric.getId(), ContentStatus.PUBLISHED) == 1
-                && languageVersionRepository.findByLyric_IdAndLanguageCode(lyric.getId(), language)
-                        .map(version -> version.getStatus() == ContentStatus.PUBLISHED)
-                        .orElse(false);
+    private boolean hasValidLanguageVersion(Long lyricId) {
+        return languageVersionRepository.findAllByLyric_IdOrderByLanguageCode(lyricId).stream()
+                .anyMatch(version -> {
+                    try {
+                        String plainText = version.getContentFormat() == LyricContentFormat.HTML
+                                ? HtmlTranslationSanitizer.validatePersisted(version.getHtmlContent()).plainText()
+                                : TiptapDocumentValidator.validatePersisted(version.getDocument()).plainText();
+                        return StringUtils.hasText(plainText);
+                    } catch (InvalidLyricHtmlException | InvalidTiptapDocumentException exception) {
+                        return false;
+                    }
+                });
     }
 
     private Set<LyricSubject> resolveSubjects(List<String> ids) {

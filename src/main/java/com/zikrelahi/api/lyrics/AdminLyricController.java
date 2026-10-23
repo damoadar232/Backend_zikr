@@ -82,16 +82,6 @@ public class AdminLyricController {
                 reference, languageCode, request, currentAdmin(authentication))));
     }
 
-    @PatchMapping("/{reference}/languages/{languageCode}/status")
-    public ResponseEntity<ApiResponse<AdminLyricDto>> setLanguageStatus(
-            @PathVariable String reference,
-            @PathVariable String languageCode,
-            @Valid @RequestBody StatusRequest request,
-            Authentication authentication) {
-        return ResponseEntity.ok(ApiResponse.ok(lyricService.setLanguageStatus(
-                reference, languageCode, request.status(), currentAdmin(authentication))));
-    }
-
     @PatchMapping("/{reference}/status")
     public ResponseEntity<ApiResponse<AdminLyricDto>> setLyricStatus(
             @PathVariable String reference,
