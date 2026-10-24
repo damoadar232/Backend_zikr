@@ -15,8 +15,21 @@ public class TranslatorService {
     private final TranslatorRepository translatorRepository;
 
     @Transactional(readOnly = true)
-    public List<TranslatorDto> listAll() {
-        return translatorRepository.findAll().stream().map(TranslatorDto::from).toList();
+    public List<TranslatorDto> listAll(String languageCode) {
+        if (languageCode == null || languageCode.isBlank()) {
+            return translatorRepository.findAll().stream().map(TranslatorDto::from).toList();
+        }
+        LanguageCode language;
+        try {
+            language = LanguageCode.valueOf(languageCode);
+        } catch (IllegalArgumentException ex) {
+            throw new IllegalArgumentException(
+                    "Language '" + languageCode + "' is not supported. Use en, hi, or ur.");
+        }
+        return translatorRepository.findByLanguageCodeOrderByNameAsc(language)
+                .stream()
+                .map(TranslatorDto::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)

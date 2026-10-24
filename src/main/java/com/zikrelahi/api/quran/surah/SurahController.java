@@ -53,9 +53,8 @@ public class SurahController {
 
     /**
      * GET /api/v1/quran/surahs/{number}/ayahs?translation=en
-     * Returns all published Ayahs for the Surah combined with the requested translation.
-     * Ayahs that have no published translation in the requested language are omitted;
-     * the frontend reader handles missing slots with its existing "unavailable" notice.
+     * Returns every published Ayah for a published Surah. The requested translation
+     * is null when no published translation exists for that Ayah.
      */
     @GetMapping("/{number}/ayahs")
     public ResponseEntity<ApiResponse<List<PublicAyahDto>>> getSurahAyahs(

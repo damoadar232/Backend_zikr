@@ -11,6 +11,8 @@ public interface AyahRepository extends JpaRepository<Ayah, AyahId> {
     List<Ayah> findByIdSurahNumberAndStatusOrderByIdAyahNumberAsc(
             Short surahNumber, ContentStatus status);
 
+    List<Ayah> findByIdSurahNumberOrderByIdAyahNumberAsc(Short surahNumber);
+
     Optional<Ayah> findByIdSurahNumberAndIdAyahNumber(
             Short surahNumber, Short ayahNumber);
 

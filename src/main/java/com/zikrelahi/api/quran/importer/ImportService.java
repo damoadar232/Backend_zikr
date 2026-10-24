@@ -1,6 +1,7 @@
 package com.zikrelahi.api.quran.importer;
 
 import com.zikrelahi.api.common.ContentStatus;
+import com.zikrelahi.api.common.ConflictException;
 import com.zikrelahi.api.quran.ayah.Ayah;
 import com.zikrelahi.api.quran.ayah.AyahId;
 import com.zikrelahi.api.quran.ayah.AyahRepository;
@@ -23,9 +24,8 @@ import java.util.*;
  * Invalid imports never leave partially committed content — the entire
  * batch either succeeds or the transaction rolls back.
  *
- * Existing published records are preserved: an Ayah that is already
- * PUBLISHED keeps its status when its Arabic text is updated via import.
- * New Ayahs and translations are always created as DRAFT.
+ * Imports are append-only by default: existing Arabic text and translations
+ * are never replaced. New records are always created as DRAFT.
  */
 @Slf4j
 @Service
@@ -78,43 +78,26 @@ public class ImportService {
                     .findByIdSurahNumberAndIdAyahNumber(surahNo, ayahNo)
                     .orElse(null);
 
-            boolean hasArabic = row.arabicText() != null && !row.arabicText().isBlank();
-
             if (ayah == null) {
-                // Create new Ayah as DRAFT
-                if (hasArabic) {
-                    ayah = Ayah.builder()
-                            .id(AyahId.of(row.surahNumber(), row.ayahNumber()))
-                            .surah(surah)
-                            .arabicText(row.arabicText().trim())
-                            .status(ContentStatus.DRAFT)
-                            .build();
-                    ayahRepository.save(ayah);
-                    imported++;
-                }
-            } else {
-                // Update existing Ayah — entity is already managed in this
-                // transaction, so dirty checking flushes the change automatically.
-                // No need to call save() — calling it with a @MapsId lazy proxy
-                // can trigger a NullPointerException on flush.
-                if (hasArabic) {
-                    ayah.setArabicText(row.arabicText().trim());
-                    updated++;
-                }
+                ayah = Ayah.builder()
+                        .id(AyahId.of(row.surahNumber(), row.ayahNumber()))
+                        .surah(surah)
+                        .arabicText(row.arabicText().trim())
+                        .status(ContentStatus.DRAFT)
+                        .build();
+                ayahRepository.save(ayah);
+                imported++;
             }
 
-            // ─── Upsert translations ───────────────────────────────────────
-            if (hasArabic || ayah != null) {
-                translationsCreated += upsertTranslation(
-                        surahNo, ayahNo, row.translationEn(), row.translatorIdEn(),
-                        LanguageCode.en, translatorMap);
-                translationsCreated += upsertTranslation(
-                        surahNo, ayahNo, row.translationHi(), row.translatorIdHi(),
-                        LanguageCode.hi, translatorMap);
-                translationsCreated += upsertTranslation(
-                        surahNo, ayahNo, row.translationUr(), row.translatorIdUr(),
-                        LanguageCode.ur, translatorMap);
-            }
+            translationsCreated += upsertTranslation(
+                    surahNo, ayahNo, row.translationEn(), row.translatorIdEn(),
+                    LanguageCode.en, translatorMap);
+            translationsCreated += upsertTranslation(
+                    surahNo, ayahNo, row.translationHi(), row.translatorIdHi(),
+                    LanguageCode.hi, translatorMap);
+            translationsCreated += upsertTranslation(
+                    surahNo, ayahNo, row.translationUr(), row.translatorIdUr(),
+                    LanguageCode.ur, translatorMap);
         }
 
         log.info("Import committed: {} new Ayahs, {} updated, {} translations created",
@@ -123,7 +106,7 @@ public class ImportService {
     }
 
     /**
-     * Creates a translation row if it doesn't exist.
+     * Creates a translation row; existing rows are guarded against validation/commit races.
      * Returns 1 if a new row was created, 0 otherwise.
      * Existing translations are not overwritten during import — the admin
      * reviews imported translations before publishing them.
@@ -138,16 +121,18 @@ public class ImportService {
             return 0;
         }
 
-        // Skip if a translation already exists for this language
         if (translationRepository
                 .findBySurahNumberAndAyahNumberAndLanguageCode(surahNo, ayahNo, lang)
                 .isPresent()) {
-            return 0;
+            throw new ConflictException(
+                    "A " + lang + " translation already exists for Ayah "
+                    + surahNo + ":" + ayahNo + ".");
         }
 
         Translator translator = translatorMap.get(translatorId);
         if (translator == null || translator.getLanguageCode() != lang) {
-            return 0; // Should have been caught by validation, but guard anyway
+            throw new IllegalArgumentException(
+                    "Translator " + translatorId + " does not match language " + lang + ".");
         }
 
         Translation translation = Translation.builder()

@@ -2,11 +2,13 @@ package com.zikrelahi.api.lyrics;
 
 import com.zikrelahi.api.common.ApiResponse;
 import com.zikrelahi.api.lyrics.LyricDtos.PageSlice;
+import com.zikrelahi.api.lyrics.LyricDtos.PublicSubjectDto;
 import com.zikrelahi.api.lyrics.LyricDtos.PublicLyricDto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
+import java.util.List;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -34,6 +36,11 @@ public class PublicLyricController {
             @RequestParam(required = false) String language) {
         return ResponseEntity.ok(ApiResponse.ok(
                 lyricService.list(page, size, category, reciter, poet, language)));
+    }
+
+    @GetMapping("/subjects")
+    public ResponseEntity<ApiResponse<List<PublicSubjectDto>>> listAvailableSubjects() {
+        return ResponseEntity.ok(ApiResponse.ok(lyricService.listAvailableSubjects()));
     }
 
     @GetMapping("/{reference}")

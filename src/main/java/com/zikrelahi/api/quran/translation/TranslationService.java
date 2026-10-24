@@ -9,6 +9,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 /**
  * Manages per-language translation independently.
  * Updating English never touches Arabic, Hindi, or Urdu rows.
@@ -21,6 +23,17 @@ public class TranslationService {
     private final AyahRepository ayahRepository;
     private final TranslatorRepository translatorRepository;
 
+    @Transactional(readOnly = true)
+    public List<TranslationDto> listByAyah(int surahNumber, int ayahNumber) {
+        validateAyahAddress(surahNumber, ayahNumber);
+        return translationRepository
+                .findBySurahNumberAndAyahNumberOrderByLanguageCodeAsc(
+                        (short) surahNumber, (short) ayahNumber)
+                .stream()
+                .map(TranslationDto::from)
+                .toList();
+    }
+
     /**
      * Creates or replaces the translation for exactly one language.
      * If a row already exists for (surah, ayah, lang) it is updated in-place.
@@ -29,12 +42,7 @@ public class TranslationService {
     @Transactional
     public TranslationDto upsert(int surahNumber, int ayahNumber,
                                   String langCode, TranslationRequest req) {
-        // Verify the Ayah exists before writing a translation for it
-        if (!ayahRepository.existsByIdSurahNumberAndIdAyahNumber(
-                (short) surahNumber, (short) ayahNumber)) {
-            throw new ResourceNotFoundException(
-                    "Ayah " + surahNumber + ":" + ayahNumber + " not found.");
-        }
+        validateAyahAddress(surahNumber, ayahNumber);
 
         // Resolve language
         LanguageCode language;
@@ -65,7 +73,7 @@ public class TranslationService {
                         .languageCode(language)
                         .build());
 
-        translation.setText(req.text());
+        translation.setText(req.text().trim());
         translation.setTranslator(translator);
         translation.setStatus(req.effectiveStatus());
 
@@ -76,6 +84,7 @@ public class TranslationService {
     @Transactional
     public TranslationDto patchStatus(int surahNumber, int ayahNumber,
                                        String langCode, ContentStatus status) {
+        validateAyahAddress(surahNumber, ayahNumber);
         LanguageCode language;
         try {
             language = LanguageCode.valueOf(langCode);
@@ -91,5 +100,18 @@ public class TranslationService {
                         + surahNumber + ":" + ayahNumber + "."));
         translation.setStatus(status);
         return TranslationDto.from(translationRepository.save(translation));
+    }
+
+    private void validateAyahAddress(int surahNumber, int ayahNumber) {
+        if (surahNumber < 1 || surahNumber > 114) {
+            throw new ResourceNotFoundException(
+                    "Surah " + surahNumber + " does not exist.");
+        }
+        if (ayahNumber < 1 || ayahNumber > Short.MAX_VALUE
+                || !ayahRepository.existsByIdSurahNumberAndIdAyahNumber(
+                        (short) surahNumber, (short) ayahNumber)) {
+            throw new ResourceNotFoundException(
+                    "Ayah " + surahNumber + ":" + ayahNumber + " not found.");
+        }
     }
 }

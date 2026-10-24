@@ -3,9 +3,9 @@ package com.zikrelahi.api.quran.importer;
 /**
  * Summary returned after a successful commit.
  * `imported` = new Ayahs created.
- * `updated`  = existing Ayahs whose Arabic text was replaced.
+ * `updated`  = retained for response compatibility; append-only import always returns 0.
  * `translationsCreated` = new translation rows inserted.
- * `translationsUpdated`  = existing translation rows replaced.
+ * `translationsUpdated`  = retained for response compatibility; append-only import always returns 0.
  */
 public record ImportSummary(
         int imported,

@@ -1,8 +1,12 @@
 package com.zikrelahi.api.quran.importer;
 
+import com.zikrelahi.api.quran.ayah.Ayah;
+import com.zikrelahi.api.quran.ayah.AyahRepository;
 import com.zikrelahi.api.quran.surah.Surah;
 import com.zikrelahi.api.quran.surah.SurahRepository;
 import com.zikrelahi.api.quran.translation.LanguageCode;
+import com.zikrelahi.api.quran.translation.Translation;
+import com.zikrelahi.api.quran.translation.TranslationRepository;
 import com.zikrelahi.api.quran.translator.Translator;
 import com.zikrelahi.api.quran.translator.TranslatorRepository;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +25,8 @@ public class ImportValidator {
 
     private final SurahRepository surahRepository;
     private final TranslatorRepository translatorRepository;
+    private final AyahRepository ayahRepository;
+    private final TranslationRepository translationRepository;
 
     /**
      * Validate every row in the batch and return a full report.
@@ -28,22 +34,43 @@ public class ImportValidator {
      */
     public ImportResult validate(List<AyahImportRow> rows) {
         List<ImportRowError> errors = new ArrayList<>();
+        if (rows == null) {
+            return new ImportResult(0, 0, 1, List.of(
+                    new ImportRowError(0, null, null, "rows", "MISSING_ROWS",
+                            "Rows are required.")));
+        }
 
         // Load reference data once
         Map<Short, Surah> surahMap = loadSurahMap();
         Map<Long, Translator> translatorMap = loadTranslatorMap();
+        Map<String, Ayah> existingAyahs = new HashMap<>();
+        for (Ayah ayah : ayahRepository.findAll()) {
+            existingAyahs.put(key(ayah.getSurahNumber(), ayah.getAyahNumber()), ayah);
+        }
+        Map<String, Set<LanguageCode>> existingTranslations = new HashMap<>();
+        for (Translation translation : translationRepository.findAll()) {
+            existingTranslations.computeIfAbsent(
+                    key(translation.getSurahNumber(), translation.getAyahNumber()),
+                    ignored -> new HashSet<>()).add(translation.getLanguageCode());
+        }
 
         // Track seen (surah, ayah) pairs for duplicate detection within the batch
         Set<String> seen = new HashSet<>();
+        Set<Integer> invalidRows = new HashSet<>();
 
         for (int i = 0; i < rows.size(); i++) {
             int rowNum = i + 1; // 1-based for human-readable reports
             AyahImportRow row = rows.get(i);
-            List<ImportRowError> rowErrors = validateRow(row, rowNum, surahMap, translatorMap, seen);
+            List<ImportRowError> rowErrors = validateRow(
+                    row, rowNum, surahMap, translatorMap, seen,
+                    existingAyahs, existingTranslations);
+            if (!rowErrors.isEmpty()) {
+                invalidRows.add(rowNum);
+            }
             errors.addAll(rowErrors);
         }
 
-        int validRows = rows.size() - errors.size();
+        int validRows = rows.size() - invalidRows.size();
         return new ImportResult(rows.size(), validRows, errors.size(), errors);
     }
 
@@ -51,9 +78,16 @@ public class ImportValidator {
             AyahImportRow row, int rowNum,
             Map<Short, Surah> surahMap,
             Map<Long, Translator> translatorMap,
-            Set<String> seen) {
+            Set<String> seen,
+            Map<String, Ayah> existingAyahs,
+            Map<String, Set<LanguageCode>> existingTranslations) {
 
         List<ImportRowError> errors = new ArrayList<>();
+        if (row == null) {
+            errors.add(new ImportRowError(rowNum, null, null, "row",
+                    "MISSING_ROW", "Import row cannot be null."));
+            return errors;
+        }
 
         // 1. Surah number must be present and in range
         if (row.surahNumber() == null) {
@@ -99,23 +133,25 @@ public class ImportValidator {
             return errors;
         }
 
-        // 4. At least Arabic text or one translation must be present
+        // Arabic is required on every imported row to prevent orphaned translations.
         boolean hasArabic = row.arabicText() != null && !row.arabicText().isBlank();
         boolean hasEn = row.translationEn() != null && !row.translationEn().isBlank();
         boolean hasHi = row.translationHi() != null && !row.translationHi().isBlank();
         boolean hasUr = row.translationUr() != null && !row.translationUr().isBlank();
 
-        if (!hasArabic && !hasEn && !hasHi && !hasUr) {
+        if (!hasArabic) {
             errors.add(new ImportRowError(rowNum, row.surahNumber(), row.ayahNumber(),
-                    "arabicText", "MISSING_CONTENT",
-                    "At least Arabic text or one translation is required."));
+                    "arabicText", "MISSING_ARABIC",
+                    "Arabic text is required for every imported Ayah."));
         }
 
-        // 5. Validate Arabic text if present
-        if (hasArabic && row.arabicText().trim().isEmpty()) {
+        String addressKey = key(row.surahNumber(), row.ayahNumber());
+        Ayah existingAyah = existingAyahs.get(addressKey);
+        if (existingAyah != null && hasArabic
+                && !existingAyah.getArabicText().trim().equals(row.arabicText().trim())) {
             errors.add(new ImportRowError(rowNum, row.surahNumber(), row.ayahNumber(),
-                    "arabicText", "EMPTY_ARABIC",
-                    "Arabic text is present but empty."));
+                    "arabicText", "EXISTING_AYAH_CONFLICT",
+                    "Import will not replace existing Arabic text; use the editor for an explicit update."));
         }
 
         // 6. Validate EN translation + translator
@@ -133,7 +169,24 @@ public class ImportValidator {
                 "ur", "translationUr", "translatorIdUr",
                 surahMap, translatorMap, errors);
 
+        validateExistingTranslation(rowNum, row, hasEn, LanguageCode.en, existingTranslations, errors);
+        validateExistingTranslation(rowNum, row, hasHi, LanguageCode.hi, existingTranslations, errors);
+        validateExistingTranslation(rowNum, row, hasUr, LanguageCode.ur, existingTranslations, errors);
+
         return errors;
+    }
+
+    private void validateExistingTranslation(
+            int rowNum, AyahImportRow row, boolean hasText, LanguageCode language,
+            Map<String, Set<LanguageCode>> existingTranslations, List<ImportRowError> errors) {
+        if (hasText && existingTranslations
+                .getOrDefault(key(row.surahNumber(), row.ayahNumber()), Set.of())
+                .contains(language)) {
+            errors.add(new ImportRowError(rowNum, row.surahNumber(), row.ayahNumber(),
+                    "translation" + language.name().toUpperCase(),
+                    "EXISTING_TRANSLATION_CONFLICT",
+                    "A translation already exists for this Ayah and language; import will not replace it."));
+        }
     }
 
     private void validateTranslation(
@@ -143,7 +196,14 @@ public class ImportValidator {
             Map<Short, Surah> surahMap, Map<Long, Translator> translatorMap,
             List<ImportRowError> errors) {
 
-        if (!hasText) return; // Translation for this language is optional
+        if (!hasText) {
+            if (translatorId != null) {
+                errors.add(new ImportRowError(rowNum, row.surahNumber(), row.ayahNumber(),
+                        translatorField, "TRANSLATOR_WITHOUT_TRANSLATION",
+                        "A translator cannot be supplied without translation text."));
+            }
+            return;
+        }
 
         if (translatorId == null) {
             errors.add(new ImportRowError(rowNum, row.surahNumber(), row.ayahNumber(),
@@ -182,5 +242,9 @@ public class ImportValidator {
             map.put(t.getId(), t);
         }
         return map;
+    }
+
+    private String key(int surahNumber, int ayahNumber) {
+        return surahNumber + ":" + ayahNumber;
     }
 }

@@ -8,6 +8,8 @@ import java.util.Optional;
 
 public interface SurahRepository extends JpaRepository<Surah, Short> {
 
+    List<Surah> findAllByOrderByNumberAsc();
+
     List<Surah> findByStatusOrderByNumberAsc(ContentStatus status);
 
     List<Surah> findByRevelationAndStatusOrderByNumberAsc(

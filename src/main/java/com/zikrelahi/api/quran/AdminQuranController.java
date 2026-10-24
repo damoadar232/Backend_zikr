@@ -6,6 +6,9 @@ import com.zikrelahi.api.quran.ayah.*;
 import com.zikrelahi.api.quran.translation.TranslationDto;
 import com.zikrelahi.api.quran.translation.TranslationRequest;
 import com.zikrelahi.api.quran.translation.TranslationService;
+import com.zikrelahi.api.quran.surah.AdminSurahDto;
+import com.zikrelahi.api.quran.surah.SurahService;
+import com.zikrelahi.api.quran.surah.SurahUpdateRequest;
 import com.zikrelahi.api.quran.translator.TranslatorDto;
 import com.zikrelahi.api.quran.translator.TranslatorRequest;
 import com.zikrelahi.api.quran.translator.TranslatorService;
@@ -29,6 +32,32 @@ public class AdminQuranController {
     private final AyahService ayahService;
     private final TranslationService translationService;
     private final TranslatorService translatorService;
+    private final SurahService surahService;
+
+    @GetMapping("/surahs")
+    public ResponseEntity<ApiResponse<List<AdminSurahDto>>> listSurahs() {
+        return ResponseEntity.ok(ApiResponse.ok(surahService.listAllForAdmin()));
+    }
+
+    @GetMapping("/surahs/{number}")
+    public ResponseEntity<ApiResponse<AdminSurahDto>> getSurah(@PathVariable int number) {
+        return ResponseEntity.ok(ApiResponse.ok(surahService.getForAdmin(number)));
+    }
+
+    @PutMapping("/surahs/{number}")
+    public ResponseEntity<ApiResponse<AdminSurahDto>> updateSurah(
+            @PathVariable int number,
+            @Valid @RequestBody SurahUpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(surahService.updateForAdmin(number, request)));
+    }
+
+    @PatchMapping("/surahs/{number}/status")
+    public ResponseEntity<ApiResponse<AdminSurahDto>> patchSurahStatus(
+            @PathVariable int number,
+            @Valid @RequestBody StatusRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                surahService.updateStatus(number, request.status())));
+    }
 
     // ─── Ayah CRUD ───────────────────────────────────────────────────────────
 
@@ -61,7 +90,7 @@ public class AdminQuranController {
             @PathVariable int surah,
             @PathVariable int ayah,
             @Valid @RequestBody AyahRequest request) {
-        AyahDto updated = ayahService.updateArabicText(surah, ayah, request.arabicText());
+        AyahDto updated = ayahService.update(surah, ayah, request);
         return ResponseEntity.ok(ApiResponse.ok(updated));
     }
 
@@ -101,6 +130,14 @@ public class AdminQuranController {
         return ResponseEntity.ok(ApiResponse.ok(dto));
     }
 
+    @GetMapping("/ayahs/{surah}/{ayah}/translations")
+    public ResponseEntity<ApiResponse<List<TranslationDto>>> listTranslations(
+            @PathVariable int surah,
+            @PathVariable int ayah) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                translationService.listByAyah(surah, ayah)));
+    }
+
     /**
      * PATCH /api/v1/admin/quran/ayahs/{surah}/{ayah}/translations/{lang}/status
      * Publish or draft a single language translation independently.
@@ -119,8 +156,9 @@ public class AdminQuranController {
 
     /** GET /api/v1/admin/quran/translators */
     @GetMapping("/translators")
-    public ResponseEntity<ApiResponse<List<TranslatorDto>>> listTranslators() {
-        return ResponseEntity.ok(ApiResponse.ok(translatorService.listAll()));
+    public ResponseEntity<ApiResponse<List<TranslatorDto>>> listTranslators(
+            @RequestParam(required = false) String language) {
+        return ResponseEntity.ok(ApiResponse.ok(translatorService.listAll(language)));
     }
 
     /** POST /api/v1/admin/quran/translators → 201 */

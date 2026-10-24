@@ -50,22 +50,28 @@ public class AyahService {
         Ayah ayah = Ayah.builder()
                 .id(AyahId.of(req.surahNumber(), req.ayahNumber()))
                 .surah(surah)
-                .arabicText(req.arabicText())
-                .status(ContentStatus.DRAFT)
+                .arabicText(req.arabicText().trim())
+                .status(req.effectiveStatus())
                 .build();
         return AyahDto.from(ayahRepository.save(ayah));
     }
 
     @Transactional(readOnly = true)
     public AyahDto getOne(int surahNumber, int ayahNumber) {
-        return findOrThrow(surahNumber, ayahNumber);
+        return AyahDto.from(resolveAyah(surahNumber, ayahNumber));
     }
 
     @Transactional(readOnly = true)
     public List<AyahDto> listBySurah(int surahNumber) {
+        if (surahNumber < 1 || surahNumber > 114) {
+            throw new ResourceNotFoundException(
+                    "Surah " + surahNumber + " does not exist.");
+        }
+        Surah surah = surahRepository.findById((short) surahNumber)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Surah " + surahNumber + " does not exist."));
         return ayahRepository
-                .findByIdSurahNumberAndStatusOrderByIdAyahNumberAsc(
-                        (short) surahNumber, ContentStatus.PUBLISHED)
+                .findByIdSurahNumberOrderByIdAyahNumberAsc(surah.getNumber())
                 .stream()
                 .map(AyahDto::from)
                 .toList();
@@ -79,9 +85,16 @@ public class AyahService {
     }
 
     @Transactional
-    public AyahDto updateArabicText(int surahNumber, int ayahNumber, String arabicText) {
+    public AyahDto update(int surahNumber, int ayahNumber, AyahRequest request) {
+        if (request.surahNumber() != surahNumber || request.ayahNumber() != ayahNumber) {
+            throw new IllegalArgumentException(
+                    "Ayah address in the request must match the URL.");
+        }
         Ayah ayah = resolveAyah(surahNumber, ayahNumber);
-        ayah.setArabicText(arabicText);
+        ayah.setArabicText(request.arabicText().trim());
+        if (request.status() != null) {
+            ayah.setStatus(request.status());
+        }
         return AyahDto.from(ayahRepository.save(ayah));
     }
 
@@ -94,10 +107,8 @@ public class AyahService {
     // ─── Public reader operation ──────────────────────────────────────────────
 
     /**
-     * Returns all published Ayahs for a Surah with the requested translation.
-     * Only Ayahs that have a published translation in the requested language are returned.
-     * Ayahs with no published translation in that language are silently omitted —
-     * the frontend reader shows "unavailable" notices for slots with no content.
+     * Returns every published Ayah in a published Surah. The requested
+     * translation is optional and is null when no published translation exists.
      */
     @Transactional(readOnly = true)
     public List<PublicAyahDto> listPublishedWithTranslation(int surahNumber, String langCode) {
@@ -105,6 +116,9 @@ public class AyahService {
             throw new ResourceNotFoundException(
                     "Surah " + surahNumber + " does not exist.");
         }
+        surahRepository.findByNumberAndStatus((short) surahNumber, ContentStatus.PUBLISHED)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Surah " + surahNumber + " is not yet published."));
         LanguageCode language;
         try {
             language = LanguageCode.valueOf(langCode);
@@ -112,27 +126,30 @@ public class AyahService {
             throw new IllegalArgumentException(
                     "Translation language '" + langCode + "' is not supported. Use en, hi, or ur.");
         }
-        // Each row is Object[]{Translation, arabicText String}
         return translationRepository
-                .findPublishedWithArabicBySurahAndLanguage(
+                .findPublishedAyahsBySurahAndLanguage(
                         (short) surahNumber, language, ContentStatus.PUBLISHED)
                 .stream()
-                .map(row -> PublicAyahDto.from((Translation) row[0], (String) row[1]))
+                .map(row -> PublicAyahDto.from(
+                        (Ayah) row[0], (Translation) row[1], (String) row[2]))
                 .toList();
     }
 
     // ─── Internal helpers ─────────────────────────────────────────────────────
 
-    private AyahDto findOrThrow(int surahNumber, int ayahNumber) {
-        return ayahRepository
-                .findByIdSurahNumberAndIdAyahNumber(
-                        (short) surahNumber, (short) ayahNumber)
-                .map(AyahDto::from)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Ayah " + surahNumber + ":" + ayahNumber + " not found."));
-    }
-
     private Ayah resolveAyah(int surahNumber, int ayahNumber) {
+        if (surahNumber < 1 || surahNumber > 114) {
+            throw new ResourceNotFoundException(
+                    "Surah " + surahNumber + " does not exist.");
+        }
+        Surah surah = surahRepository.findById((short) surahNumber)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Surah " + surahNumber + " does not exist."));
+        if (ayahNumber < 1 || ayahNumber > surah.getAyahCount()) {
+            throw new IllegalArgumentException(
+                    "Ayah " + ayahNumber + " is out of range for Surah "
+                    + surahNumber + " (max " + surah.getAyahCount() + ").");
+        }
         return ayahRepository
                 .findByIdSurahNumberAndIdAyahNumber(
                         (short) surahNumber, (short) ayahNumber)

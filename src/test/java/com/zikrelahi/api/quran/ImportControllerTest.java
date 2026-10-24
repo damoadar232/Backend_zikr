@@ -6,6 +6,8 @@ import com.zikrelahi.api.admin.AdminUser;
 import com.zikrelahi.api.admin.AdminUserRepository;
 import com.zikrelahi.api.auth.LoginRequest;
 import com.zikrelahi.api.quran.ayah.AyahRepository;
+import com.zikrelahi.api.quran.surah.Surah;
+import com.zikrelahi.api.quran.surah.SurahRepository;
 import com.zikrelahi.api.quran.importer.AyahImportRow;
 import com.zikrelahi.api.quran.importer.ImportRequest;
 import com.zikrelahi.api.quran.translation.TranslationRepository;
@@ -26,6 +28,8 @@ import java.util.Map;
 import static org.hamcrest.Matchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -39,6 +43,7 @@ class ImportControllerTest {
     @Autowired private AyahRepository ayahRepository;
     @Autowired private TranslationRepository translationRepository;
     @Autowired private TranslatorRepository translatorRepository;
+    @Autowired private SurahRepository surahRepository;
     @Autowired private PasswordEncoder passwordEncoder;
 
     private static final String EMAIL    = "importtest@example.com";
@@ -180,16 +185,16 @@ class ImportControllerTest {
     }
 
     @Test
-    void validateDetectsMissingArabicAndTranslations() throws Exception {
+    void validateRequiresArabicEvenWhenTranslationIsProvided() throws Exception {
         List<AyahImportRow> rows = List.of(
-                row(2, 1, null, null, null, null, null, null, null));
+                row(2, 1, null, "verified translation", null, null, translatorIdEn, null, null));
 
         mockMvc.perform(post("/api/v1/admin/quran/import/validate")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(wrap(rows)))
                 .andExpect(status().isUnprocessableEntity())
-                .andExpect(jsonPath("$.data.errors[0].code", is("MISSING_CONTENT")));
+                .andExpect(jsonPath("$.data.errors[0].code", is("MISSING_ARABIC")));
     }
 
     @Test
@@ -230,8 +235,7 @@ class ImportControllerTest {
     }
 
     @Test
-    void commitPreservesExistingPublishedAyahStatus() throws Exception {
-        // Pre-create an Ayah and publish it
+    void commitRejectsReplacingExistingPublishedAyah() throws Exception {
         mockMvc.perform(post("/api/v1/admin/quran/ayahs")
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -246,7 +250,7 @@ class ImportControllerTest {
                         .content("{\"status\":\"PUBLISHED\"}"))
                 .andExpect(status().isOk());
 
-        // Import with updated text for the same Ayah
+        // Import cannot replace existing Arabic text; the editor is the explicit update path.
         List<AyahImportRow> rows = List.of(
                 row(2, 1, "updated arabic", null, null, null, null, null, null));
 
@@ -254,24 +258,103 @@ class ImportControllerTest {
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(wrap(rows)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.imported", is(0)))
-                .andExpect(jsonPath("$.data.updated", is(1)));
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.data.errors[0].code", is("EXISTING_AYAH_CONFLICT")));
 
-        // Verify the Ayah is still PUBLISHED after import
-        mockMvc.perform(patch("/api/v1/admin/quran/ayahs/2/1/status")
-                        .header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"PUBLISHED\"}"))
-                .andExpect(status().isOk());
-
-        // Verify text was updated
         var ayah = ayahRepository
                 .findByIdSurahNumberAndIdAyahNumber((short) 2, (short) 1)
                 .orElseThrow();
-        Assertions.assertEquals("updated arabic", ayah.getArabicText());
+        Assertions.assertEquals("original", ayah.getArabicText());
         Assertions.assertEquals(com.zikrelahi.api.common.ContentStatus.PUBLISHED,
                 ayah.getStatus());
+    }
+
+    @Test
+    void importRejectsExistingTranslationWithoutChangingIt() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/quran/ayahs")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ayahBody(2, 1, "verified Arabic")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(put("/api/v1/admin/quran/ayahs/2/1/translations/en")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "text", "original translation", "translatorId", translatorIdEn))))
+                .andExpect(status().isOk());
+
+        List<AyahImportRow> rows = List.of(
+                row(2, 1, "verified Arabic", "replacement translation", null, null,
+                        translatorIdEn, null, null));
+        mockMvc.perform(post("/api/v1/admin/quran/import/commit")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(wrap(rows)))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.data.errors[0].code", is("EXISTING_TRANSLATION_CONFLICT")));
+
+        Assertions.assertEquals("original translation",
+                translationRepository.findBySurahNumberAndAyahNumberAndLanguageCode(
+                        (short) 2, (short) 1, com.zikrelahi.api.quran.translation.LanguageCode.en)
+                        .orElseThrow().getText());
+    }
+
+    @Test
+    void adminSurahListRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/quran/surahs"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void adminCanViewSurahsAndUpdateNonCanonicalMetadata() throws Exception {
+        Surah original = surahRepository.findById((short) 1).orElseThrow();
+        mockMvc.perform(get("/api/v1/admin/quran/surahs")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].number", is(1)))
+                .andExpect(jsonPath("$.data[0].status", not(emptyOrNullString())));
+
+        mockMvc.perform(put("/api/v1/admin/quran/surahs/1")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "arabicName", original.getArabicName(),
+                                "transliterated", original.getTransliterated(),
+                                "englishMeaning", original.getEnglishMeaning(),
+                                "revelation", original.getRevelation().name()))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.number", is(1)))
+                .andExpect(jsonPath("$.data.ayahCount", is((int) original.getAyahCount())));
+    }
+
+    @Test
+    void adminAyahListIncludesDraftRecords() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/quran/ayahs")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ayahBody(2, 1, "verified Arabic")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(get("/api/v1/admin/quran/ayahs?surah=2")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data[0].status", is("DRAFT")));
+    }
+
+    @Test
+    void translatorListCanFilterByLanguage() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/quran/translators?language=en")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].languageCode", is("en")));
+        mockMvc.perform(get("/api/v1/admin/quran/translators?language=xx")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isBadRequest());
+    }
+
+    private String ayahBody(int surah, int ayah, String arabic) throws Exception {
+        return objectMapper.writeValueAsString(Map.of(
+                "surahNumber", surah, "ayahNumber", ayah, "arabicText", arabic));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

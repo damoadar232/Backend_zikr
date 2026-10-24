@@ -3,6 +3,7 @@ package com.zikrelahi.api.lyrics;
 import com.zikrelahi.api.common.ContentStatus;
 import com.zikrelahi.api.common.ResourceNotFoundException;
 import com.zikrelahi.api.lyrics.LyricDtos.PageSlice;
+import com.zikrelahi.api.lyrics.LyricDtos.PublicSubjectDto;
 import com.zikrelahi.api.lyrics.LyricDtos.PublicLyricDto;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -10,14 +11,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+
 @Service
 public class PublicLyricService {
 
     private final LyricRepository lyricRepository;
+    private final LyricSubjectRepository subjectRepository;
     private final LyricDtoAssembler assembler;
 
-    public PublicLyricService(LyricRepository lyricRepository, LyricDtoAssembler assembler) {
+    public PublicLyricService(
+            LyricRepository lyricRepository,
+            LyricSubjectRepository subjectRepository,
+            LyricDtoAssembler assembler) {
         this.lyricRepository = lyricRepository;
+        this.subjectRepository = subjectRepository;
         this.assembler = assembler;
     }
 
@@ -33,6 +41,13 @@ public class PublicLyricService {
                 languageCode, PageRequest.of(page, size));
         return new PageSlice<>(assembler.toPublic(results.getContent()), results.getNumber(),
                 results.getSize(), results.getTotalElements(), results.getTotalPages());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PublicSubjectDto> listAvailableSubjects() {
+        return subjectRepository.findByLyricStatus(ContentStatus.PUBLISHED).stream()
+                .map(subject -> new PublicSubjectDto(subject.getId(), subject.getName()))
+                .toList();
     }
 
     @Transactional(readOnly = true)

@@ -6,6 +6,9 @@ import com.zikrelahi.api.admin.AdminUser;
 import com.zikrelahi.api.admin.AdminUserRepository;
 import com.zikrelahi.api.auth.LoginRequest;
 import com.zikrelahi.api.quran.ayah.AyahRepository;
+import com.zikrelahi.api.quran.surah.Surah;
+import com.zikrelahi.api.quran.surah.SurahRepository;
+import com.zikrelahi.api.common.ContentStatus;
 import com.zikrelahi.api.quran.translation.TranslationRepository;
 import com.zikrelahi.api.quran.translator.TranslatorRepository;
 import org.junit.jupiter.api.*;
@@ -33,6 +36,7 @@ class AyahControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @Autowired private AdminUserRepository adminUserRepository;
     @Autowired private AyahRepository ayahRepository;
+    @Autowired private SurahRepository surahRepository;
     @Autowired private TranslationRepository translationRepository;
     @Autowired private TranslatorRepository translatorRepository;
     @Autowired private PasswordEncoder passwordEncoder;
@@ -350,6 +354,40 @@ class AyahControllerTest {
         mockMvc.perform(get("/api/v1/quran/surahs/1/ayahs").param("translation", "en"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data", hasSize(0)));
+    }
+
+    @Test
+    void publicGetAyahsReturnsAyahWhenTranslationIsMissing() throws Exception {
+        mockMvc.perform(post("/api/v1/admin/quran/ayahs")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(ayahBody(1, 1, "arabic")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(patch("/api/v1/admin/quran/ayahs/1/1/status")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"PUBLISHED\"}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/v1/quran/surahs/1/ayahs").param("translation", "en"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data", hasSize(1)))
+                .andExpect(jsonPath("$.data[0].arabicText", is("arabic")))
+                .andExpect(jsonPath("$.data[0].translation", nullValue()));
+    }
+
+    @Test
+    void publicGetAyahsRejectsUnpublishedSurah() throws Exception {
+        Surah surah = surahRepository.findById((short) 1).orElseThrow();
+        surah.setStatus(ContentStatus.DRAFT);
+        surahRepository.save(surah);
+        try {
+            mockMvc.perform(get("/api/v1/quran/surahs/1/ayahs").param("translation", "en"))
+                    .andExpect(status().isNotFound());
+        } finally {
+            surah.setStatus(ContentStatus.PUBLISHED);
+            surahRepository.save(surah);
+        }
     }
 
     @Test

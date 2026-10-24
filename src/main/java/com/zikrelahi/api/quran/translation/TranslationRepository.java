@@ -13,47 +13,52 @@ public interface TranslationRepository extends JpaRepository<Translation, Long> 
     Optional<Translation> findBySurahNumberAndAyahNumberAndLanguageCode(
             Short surahNumber, Short ayahNumber, LanguageCode languageCode);
 
-    /**
-     * Returns all published Translations for a given Surah in one language,
-     * joined to the Ayah to fetch arabicText.
-     * The Ayah join is explicit because Translation no longer holds a JPA
-     * association to Ayah (avoids @EmbeddedId join column resolution issues).
-     */
+    List<Translation> findBySurahNumberAndAyahNumberOrderByLanguageCodeAsc(
+            Short surahNumber, Short ayahNumber);
+
     @Query("""
-            SELECT t FROM Translation t
-             JOIN FETCH t.translator tr
-             JOIN com.zikrelahi.api.quran.ayah.Ayah a
-               ON a.id.surahNumber = t.surahNumber
-              AND a.id.ayahNumber  = t.ayahNumber
-             WHERE t.surahNumber  = :surah
+            SELECT a, t, tr.name
+              FROM com.zikrelahi.api.quran.ayah.Ayah a
+              JOIN a.surah s
+              LEFT JOIN Translation t
+                ON t.surahNumber = a.id.surahNumber
+               AND t.ayahNumber = a.id.ayahNumber
                AND t.languageCode = :lang
-               AND t.status       = :status
-               AND a.status       = :status
-             ORDER BY t.ayahNumber ASC
+               AND t.status = :status
+              LEFT JOIN t.translator tr
+             WHERE a.id.surahNumber = :surah
+               AND a.status = :status
+               AND s.status = :status
+             ORDER BY a.id.surahNumber ASC, a.id.ayahNumber ASC
             """)
-    List<Translation> findPublishedBySurahAndLanguage(
+    List<Object[]> findPublishedAyahsBySurahAndLanguage(
             @Param("surah")  Short surah,
             @Param("lang")   LanguageCode lang,
             @Param("status") ContentStatus status);
 
-    /**
-     * Fetches Ayah arabic text alongside each Translation row.
-     * Returns Object[] rows: [Translation, arabicText String].
-     */
     @Query("""
-            SELECT t, a.arabicText FROM Translation t
-             JOIN t.translator tr
-             JOIN com.zikrelahi.api.quran.ayah.Ayah a
-               ON a.id.surahNumber = t.surahNumber
-              AND a.id.ayahNumber  = t.ayahNumber
-             WHERE t.surahNumber  = :surah
+            SELECT a, t, tr.name
+              FROM com.zikrelahi.api.quran.ayah.Ayah a
+              JOIN a.surah s
+              LEFT JOIN Translation t
+                ON t.surahNumber = a.id.surahNumber
+               AND t.ayahNumber = a.id.ayahNumber
                AND t.languageCode = :lang
-               AND t.status       = :status
-               AND a.status       = :status
-             ORDER BY t.ayahNumber ASC
+               AND t.status = :status
+              LEFT JOIN t.translator tr
+             WHERE a.status = :status
+               AND s.status = :status
+               AND (a.id.surahNumber > :startSurah
+                    OR (a.id.surahNumber = :startSurah AND a.id.ayahNumber >= :startAyah))
+               AND (a.id.surahNumber < :endSurah
+                    OR (a.id.surahNumber = :endSurah AND a.id.ayahNumber <= :endAyah))
+             ORDER BY a.id.surahNumber ASC, a.id.ayahNumber ASC
             """)
-    List<Object[]> findPublishedWithArabicBySurahAndLanguage(
-            @Param("surah")  Short surah,
-            @Param("lang")   LanguageCode lang,
+    List<Object[]> findPublishedAyahsBetween(
+            @Param("startSurah") Short startSurah,
+            @Param("startAyah") Short startAyah,
+            @Param("endSurah") Short endSurah,
+            @Param("endAyah") Short endAyah,
+            @Param("lang") LanguageCode lang,
             @Param("status") ContentStatus status);
 }

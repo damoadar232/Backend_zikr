@@ -1,5 +1,6 @@
 package com.zikrelahi.api.quran.ayah;
 
+import com.zikrelahi.api.common.ContentStatus;
 import jakarta.validation.constraints.*;
 
 public record AyahRequest(
@@ -13,4 +14,11 @@ public record AyahRequest(
         Integer ayahNumber,
 
         @NotBlank(message = "Arabic text is required.")
-        String arabicText) {}
+        String arabicText,
+
+        ContentStatus status) {
+
+    public ContentStatus effectiveStatus() {
+        return status != null ? status : ContentStatus.DRAFT;
+    }
+}

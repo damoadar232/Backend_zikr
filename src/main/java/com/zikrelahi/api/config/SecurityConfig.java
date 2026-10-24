@@ -42,6 +42,7 @@ public class SecurityConfig {
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/quran/**").permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/api/v1/lyrics/**").permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/v1/artists/**").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/api/v1/books").permitAll()
                                                 .requestMatchers("/actuator/health").permitAll()
                                                 .requestMatchers("/api/v1/admin/**")
                                                 .hasAnyRole("ADMIN", "SUPER_ADMIN")
