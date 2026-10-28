@@ -7,4 +7,6 @@ import java.util.List;
 
 public interface TranslatorRepository extends JpaRepository<Translator, Long> {
     List<Translator> findByLanguageCodeOrderByNameAsc(LanguageCode languageCode);
+
+    List<Translator> findAllByOrderByLanguageCodeAscNameAscIdAsc();
 }
