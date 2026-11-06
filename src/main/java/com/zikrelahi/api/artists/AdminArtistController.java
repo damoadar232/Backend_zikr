@@ -6,9 +6,11 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -19,6 +21,7 @@ import java.util.List;
 public class AdminArtistController {
 
     private final AdminArtistService artistService;
+    private final ArtistProfileImageService profileImageService;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ArtistDtos.AdminArtistDto>> create(
@@ -66,6 +69,19 @@ public class AdminArtistController {
             @PathVariable String id,
             @Valid @RequestBody ArtistDtos.StatusRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(artistService.updateStatus(id, request.status())));
+    }
+
+    @PutMapping(path = "/{artistId}/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ArtistDtos.AdminArtistDto>> uploadProfileImage(
+            @PathVariable String artistId,
+            @RequestParam("profileImageFile") MultipartFile profileImageFile) {
+        return ResponseEntity.ok(ApiResponse.ok(profileImageService.upload(artistId, profileImageFile)));
+    }
+
+    @DeleteMapping("/{artistId}/profile-image")
+    public ResponseEntity<ApiResponse<ArtistDtos.AdminArtistDto>> removeProfileImage(
+            @PathVariable String artistId) {
+        return ResponseEntity.ok(ApiResponse.ok(profileImageService.remove(artistId)));
     }
 
     @DeleteMapping("/{id}")
