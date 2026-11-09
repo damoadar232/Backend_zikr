@@ -32,10 +32,11 @@ public class PublicLyricController {
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) int size,
             @RequestParam(required = false) String category,
             @RequestParam(required = false) String reciter,
+            @RequestParam(required = false) @Min(1) Long reciterId,
             @RequestParam(required = false) String poet,
             @RequestParam(required = false) String language) {
         return ResponseEntity.ok(ApiResponse.ok(
-                lyricService.list(page, size, category, reciter, poet, language)));
+                lyricService.list(page, size, category, reciter, reciterId, poet, language)));
     }
 
     @GetMapping("/subjects")

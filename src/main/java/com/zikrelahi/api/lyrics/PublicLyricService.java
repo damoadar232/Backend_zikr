@@ -31,13 +31,13 @@ public class PublicLyricService {
 
     @Transactional(readOnly = true)
     public PageSlice<PublicLyricDto> list(int page, int size, String category,
-            String reciter, String poet, String language) {
+            String reciter, Long reciterId, String poet, String language) {
         requirePageBounds(page, size);
         String languageCode = StringUtils.hasText(language)
                 ? LyricLanguageCode.fromApiCode(language).name()
                 : null;
         Page<Lyric> results = lyricRepository.findPublicPage(
-                clean(category), clean(reciter), clean(poet), numericId(poet),
+                clean(category), clean(reciter), reciterId, clean(poet), numericId(poet),
                 languageCode, PageRequest.of(page, size));
         return new PageSlice<>(assembler.toPublic(results.getContent()), results.getNumber(),
                 results.getSize(), results.getTotalElements(), results.getTotalPages());

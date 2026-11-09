@@ -25,4 +25,9 @@ public class PublicArtistController {
     public ResponseEntity<ApiResponse<List<ArtistDtos.RoleDto>>> roles() {
         return ResponseEntity.ok(ApiResponse.ok(artistService.roles()));
     }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<ArtistDtos.PublicArtistProfileDto>> get(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(artistService.getPublicProfile(id)));
+    }
 }
